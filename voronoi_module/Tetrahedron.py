@@ -15,6 +15,10 @@ class Tetrahedron:
         self.center_p = None  # 外接球の中心
         self.edge_lines = []
 
+        # Add by 関口
+        self.delaunay_lines = []
+
+
     # Class Method
     def cul_center_p_and_radius(self):  # 垂直方向に母点が並んでしまうとaの値が０になり計算できなくなってしまう。多少のノイズが必要
         """外接球の中心点と半径を計算"""
@@ -73,7 +77,7 @@ class Tetrahedron:
 
         self.radius = float(distance)
 
-    def draw_divide_tetrahedron(self):
+    def draw_divide_tetrahedron(self, move_scale=0, index=0, parent_layer=None):
         """分割四面体をRhinoに描画するためのメソッド"""
         line1 = Rhino.Geometry.Line(self.p1.x, self.p1.y, self.p1.z, self.p2.x, self.p2.y, self.p2.z)
         line2 = Rhino.Geometry.Line(self.p1.x, self.p1.y, self.p1.z, self.p3.x, self.p3.y, self.p3.z)
@@ -83,12 +87,13 @@ class Tetrahedron:
         line6 = Rhino.Geometry.Line(self.p3.x, self.p3.y, self.p3.z, self.p4.x, self.p4.y, self.p4.z)
 
         # Rhino空間上に描画
-        line1 = scriptcontext.doc.Objects.AddLine(line1)
-        line2 = scriptcontext.doc.Objects.AddLine(line2)
-        line3 = scriptcontext.doc.Objects.AddLine(line3)
-        line4 = scriptcontext.doc.Objects.AddLine(line4)
-        line5 = scriptcontext.doc.Objects.AddLine(line5)
-        line6 = scriptcontext.doc.Objects.AddLine(line6)
+        # line1 = scriptcontext.doc.Objects.AddLine(line1)
+        # line2 = scriptcontext.doc.Objects.AddLine(line2)
+        # line3 = scriptcontext.doc.Objects.AddLine(line3)
+        # line4 = scriptcontext.doc.Objects.AddLine(line4)
+        # line5 = scriptcontext.doc.Objects.AddLine(line5)
+        # line6 = scriptcontext.doc.Objects.AddLine(line6)
+
         self.edge_lines.append(line1)
         self.edge_lines.append(line2)
         self.edge_lines.append(line3)
@@ -96,9 +101,15 @@ class Tetrahedron:
         self.edge_lines.append(line5)
         self.edge_lines.append(line6)
 
-        # Layer割り当て
-        for edge in self.edge_lines:
-            set_layer(edge, "delaunay_line", 0, 255, 0)
+        # debug
+        # Layer分け
+        # for i, edge in enumerate(self.edge_lines):
+        #     # debug
+        #     move_obj(edge, move_scale)
+        #
+        #     # layer
+        #     layer_name = "tetra_edge" + str(index)
+        #     set_layer(edge, layer_name, 0, 0, 0, parent_layer)
 
     def check_point_include_circumsphere(self, check_p):
         """外接球に任意の点が内包されているかどうか判定"""
@@ -113,6 +124,18 @@ class Tetrahedron:
 
     def create_tetrahedron_face_from_edge_lines(self):
         pass
+
+    def create_delaunay_line_from_sphere_point(self):
+        pass
+
+    def divide_layer(self, num):
+        for edge in self.edge_lines:
+            layer_name = "tetra_edge" + str(num)
+            set_layer(edge, layer_name, 0, 255, 255)
+
+    def draw_sphere(self, parent_layer=None):
+        sphere = rs.AddSphere(self.center_p, self.radius)
+        set_layer(sphere, "tetra_sphere", 128, 128, 0, parent_layer)
 
 # Method
 def dit_2(dit):
@@ -172,11 +195,19 @@ def dit_4(dit):
 
     return cul
 
-def set_layer(obj, name, r, g, b, visible=True):
+def set_layer(obj, name, r, g, b, parent_layer=None, visible=True):
     if not rs.IsLayer(name):
-        layer = rs.AddLayer(name, [r, g, b], visible, locked=False, parent=None)
+        layer = rs.AddLayer(name, [r, g, b], visible, False, parent_layer)
     else:
         layer = rs.LayerId(name)
+        if not layer:
+            layer = rs.AddLayer(name, [r, g, b], visible, False, parent_layer)
 
     # オブジェクトをライヤーに割り当て
     rs.ObjectLayer(obj, layer)
+
+def move_obj(obj, scale):
+    start = rs.CreateVector(0, 0, 0)
+    end = rs.CreateVector(2000000 * scale, 0, 0)
+    translation = end - start
+    rs.MoveObject(obj, translation)

@@ -6,6 +6,7 @@ from voronoi_module import Tetrahedron
 import rhinoscriptsyntax as rs
 import Rhino.Geometry
 import scriptcontext
+import copy
 
 
 class SequentialAdding:
@@ -17,12 +18,29 @@ class SequentialAdding:
         self.divide_tetrahedron_list = []  # 更新するときに一度破棄する必要あり。
         self.points_obj_list = []          # 更新するときに一度破棄する必要あり。
 
-        # Add by 関口
+        # Add by 関口 --> space空間の情報が引き継ぐべき情報
         self.space_list = []
+
 
     def add_spatial_domain_space(self, spatial_domain):
         """空間領域を追加する"""
         self.space_list.append(spatial_domain)
+
+    def select_inner_sphere_from_previous_space(self, space_id):
+        id_number = rs.GetString("Select ID number from previous ID number of outer sphere")
+        new_inner_sphere = self.space_list[space_id-1].select_sphere_by_id_number(id_number)
+        previous_inner_sphere = copy.deepcopy(self.space_list[space_id-1].inner_sphere)
+
+        previous_outer_sphere = []
+        for sphere in self.space_list[space_id-1].sphere_outer_lists:
+            if sphere.original_id in new_inner_sphere.neighbor_ids:
+                previous_outer_sphere.append(sphere)
+
+        new_outer_sphere = [previous_inner_sphere]
+        for sphere in previous_outer_sphere:
+            new_outer_sphere.append(sphere)
+
+        return new_inner_sphere, new_outer_sphere
 
     # 以下触れていないメソッド
     def tangent_plane(self):
@@ -30,9 +48,14 @@ class SequentialAdding:
 
     def draw_result(self):
         """最終結果をRhinoに描画"""
-        for sphere in self.sphere_lists:
-            for line in sphere.space_instance.space_outlines:
-                scriptcontext.doc.Objects.AddLine(line)
+        for space in self.space_list:
+            for sphere in space.sphere_outer_lists:
+                for edge in sphere.voronoi_edge:
+                    scriptcontext.doc.Objects.AddLine(edge)
+        # Original
+        # for sphere in self.sphere_lists:
+        #     for line in sphere.space_instance.space_outlines:
+        #         scriptcontext.doc.Objects.AddLine(line)
 
     def draw_sphere(self):
         for sphere_origin in self.sphere_lists:
