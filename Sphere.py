@@ -8,25 +8,29 @@ import System.Guid, System.Array, System.Enum
 
 
 class Sphere:
-    def __init__(self, id, gl_flag, center_coordinate, radius, neighbor_ids, outer_id):
-        self.id = id  # 球体のID
-        self.outer_id = outer_id  # 外部球体のID
+    def __init__(self, original_id, inner_id, outer_ids, neighbor_ids, gl_flag, center_coordinate, radius):
+        self.original_id = original_id    # 球体独自のID番号
+        self.inner_id = inner_id          # オリジナル球体が所属する内部球のID --> original_id == 外部球の場合
+        self.outer_ids = outer_ids        # オリジナル球体が保持する外部球のID --> original_id == 内部球の場合
+        self.neighbor_ids_packing = neighbor_ids  # 球の隣接関係を保持、これにより、球体パッキングを行う。
+        self.neighbor_ids = []
+
         self.sphere = None  # 球のオブジェト　Rhino.Geometry.Sphereを保持。
         self.center_coordinate = center_coordinate  # 球の中心座標  Rhino.Geometry.Point3d
-        self.neighbor_id = neighbor_ids  # 球の隣接関係を保持、これにより、球体パッキングを行う。
         self.outer_space_flag = False  # 自身が外部球で有るかどうかのフラグ
         self.radius = radius  # 球の半径
         self.fixed_flag = False  # 固定する球かどうかのフラグ。
         self.gl_flag = gl_flag  # GLに接する球かのフラグ
-        # self.voronoi_lines = []  #
         self.under_gl_sphere = False  # GLを作成するための球かどうか
         self.gl_sphere_partner_id = None  # GLを作成する球ならば、相手のIDを保持させる。
         self.already_make_face_flag = False
         self.prev_obj = None  # sphere Packing の際に使用する
-        self.space_instance = Space.Space()  # Spaceクラスを関連付ける。
+        # self.space_instance = Space.Space()  # Spaceクラスを関連付ける。
 
         # Add by 関口
         self.voronoi_edge = []
+        self.delaunay_lines = []
+        
 
     def switch_outer_flag_true(self):
         self.outer_space_flag = True
@@ -45,14 +49,19 @@ class Sphere:
         self.gl_sphere_partner_id = partner_id
         self.under_gl_sphere = True
 
-    def draw_sphere(self, outer_sphere=True):
+    def draw_sphere(self, outer_sphere, parent):
         sphere = rs.AddSphere(self.center_coordinate, self.radius)
 
         # Layer割り当て
         if outer_sphere:
-            set_layer(sphere, "outer_sphere", 0, 0, 0)
+            set_layer(sphere, "outer_sphere", 0, 0, 0, parent, False)
         else:
-            set_layer(sphere, "spatial_domain_sphere", 255, 0, 0)
+            set_layer(sphere, "inner_sphere", 255, 0, 0, parent, False)
+
+    def draw_delaunay_line(self, parent):
+        for line in self.delaunay_lines:
+            layer_name = "Center Point" + str(self.original_id)
+            set_layer(line, layer_name, 0, 0, 0, parent)
 
     def cul_move_vector(self, other_sphere_list):
         """
@@ -60,13 +69,14 @@ class Sphere:
         :return vector, Boolean(動かすかそうでないか？)
         """
 
-        # fixed_flagがTrueの場合は動かさない。 --> 着目している球体である場合
+        # fixed_flagがTrueの場合は動かさない。 --> 内部球体である場合
         if self.fixed_flag is True:
             composited_vector = None
             return composited_vector, False
 
         vectors = []
         for other_sphere in other_sphere_list:
+            # 選択した球体 == other_sphere(選択した球体)である場合
             if self == other_sphere:
                 continue
 
@@ -81,11 +91,11 @@ class Sphere:
                 vectors.append(vector)
 
             else:
-                # 隣接関係をもつ個体の間のみ引力を働かさせる。
-                if other_sphere.id is None:
+                # 隣接関係をもつ個体の間のみ引力を働かさせる
+                if other_sphere.original_id is None:
                     pass
                 else:
-                    if other_sphere.id in self.neighbor_id:
+                    if other_sphere.original_id in self.neighbor_ids_packing:
                         # 引力
                         vector = [(other_sphere.center_coordinate[0] - self.center_coordinate[0]),
                                   (other_sphere.center_coordinate[1] - self.center_coordinate[1]),
@@ -296,14 +306,14 @@ class Sphere:
         else:
             raise Exception('Error')
 
-
-
 # Global Method
-def set_layer(obj, name, r, g, b, visible=True):
+def set_layer(obj, name, r, g, b, parent, visible=True):
     if not rs.IsLayer(name):
-        layer = rs.AddLayer(name, [r, g, b], visible, locked=False, parent=None)
+        layer = rs.AddLayer(name, [r, g, b], visible, False, parent)
     else:
         layer = rs.LayerId(name)
+        if not layer:
+            layer = rs.AddLayer(name, [r, g, b], visible, False, parent)
 
     # オブジェクトをライヤーに割り当て
     rs.ObjectLayer(obj, layer)
